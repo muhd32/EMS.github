@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fuel Station Management System</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f2f2f2; }
+    header { background: #004d00; color: #fff; padding: 10px; text-align: center; }
+    .container { padding: 20px; max-width: 1000px; margin: auto; }
+    .hidden { display: none; }
+    .card { border: 1px solid #ccc; background: #fff; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    .alert { color: red; font-weight: bold; }
+    input, button, select { margin: 5px 0; padding: 8px; width: 100%; }
+    button { background: #004d00; color: #fff; border: none; cursor: pointer; }
+    button:hover { background: #006600; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #eee; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Fuel Station Management System (FSMS)</h1>
+</header>
+
+<div class="container">
+
+  <!-- Login Section -->
+  <div id="login-section">
+    <h2>Login</h2>
+    <select id="role">
+      <option value="">Select Role</option>
+      <option value="admin">Admin</option>
+      <option value="attendant">Attendant</option>
+    </select>
+    <input type="text" id="email" placeholder="Enter Email">
+    <input type="password" id="pin" placeholder="Enter PIN">
+    <button onclick="login()">Login</button>
+  </div>
+
+  <!-- Admin Dashboard -->
+  <div id="admin-dashboard" class="hidden">
+    <h2>Admin Dashboard</h2>
+    <p><strong>Fuel Stock:</strong> <span id="admin-stock">0</span> Liters</p>
+    <p id="admin-alert" class="alert"></p>
+
+    <div class="card">
+      <h3>Manage Stock</h3>
+      <input type="number" id="newStock" placeholder="Add Liters to Stock">
+      <button onclick="addStock()">Add Stock</button>
+    </div>
+
+    <div class="card">
+      <h3>Reports</h3>
+      <p><strong>Total Sales:</strong> ₦<span id="admin-revenue">0</span></p>
+      <p><strong>Total Liters Sold:</strong> <span id="admin-litersSold">0</span></p>
+    </div>
+
+    <div class="card">
+      <h3>Transaction History</h3>
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Attendant</th><th>Liters</th><th>Price/L</th><th>Total Sale (₦)</th></tr>
+        </thead>
+        <tbody id="transaction-log"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Shift Reports</h3>
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Attendant</th><th>Status</th></tr>
+        </thead>
+        <tbody id="shift-log"></tbody>
+      </table>
+    </div>
+
+    <button onclick="logout()">Logout</button>
+  </div>
+
+  <!-- Attendant Dashboard -->
+  <div id="attendant-dashboard" class="hidden">
+    <h2>Attendant Dashboard</h2>
+    <p><strong>Fuel Stock:</strong> <span id="att-stock">0</span> Liters</p>
+    <p><strong>Your Sales:</strong> ₦<span id="att-revenue">0</span></p>
+    <p><strong>Liters Sold:</strong> <span id="att-litersSold">0</span></p>
+    <p id="att-alert" class="alert"></p>
+
+    <div class="card">
+      <h3>Record Transaction</h3>
+      <input type="number" id="liters" placeholder="Liters dispensed">
+      <input type="number" id="price" placeholder="Price per Liter (₦)">
+      <button onclick="recordTransaction()">Submit Transaction</button>
+    </div>
+
+    <div class="card">
+      <h3>Shift Report</h3>
+      <button onclick="submitShiftReport()">Submit End-of-Shift Report</button>
+    </div>
+
+    <button onclick="logout()">Logout</button>
+  </div>
+</div>
+
+<script>
+  // Load saved data from LocalStorage or set defaults
+  let stock = parseInt(localStorage.getItem("stock")) || 10000;
+  let totalRevenue = parseInt(localStorage.getItem("revenue")) || 0;
+  let totalLitersSold = parseInt(localStorage.getItem("litersSold")) || 0;
+  let transactions = JSON.parse(localStorage.getItem("transactions")) || [];
+  let shiftReports = JSON.parse(localStorage.getItem("shiftReports")) || [];
+  let shiftSubmitted = false;
+  let currentRole = "";
+  let currentUser = "";
+
+  function saveData() {
+    localStorage.setItem("stock", stock);
+    localStorage.setItem("revenue", totalRevenue);
+    localStorage.setItem("litersSold", totalLitersSold);
+    localStorage.setItem("transactions", JSON.stringify(transactions));
+    localStorage.setItem("shiftReports", JSON.stringify(shiftReports));
+  }
+
+  function login() {
+    let role = document.getElementById('role').value;
+    let email = document.getElementById('email').value;
+    let pin = document.getElementById('pin').value;
+
+    if(role && email && pin) {
+      currentRole = role;
+      currentUser = email;
+      document.getElementById('login-section').classList.add('hidden');
+
+      if(role === "admin") {
+        document.getElementById('admin-dashboard').classList.remove('hidden');
+        updateAdminDashboard();
+      } else {
+        document.getElementById('attendant-dashboard').classList.remove('hidden');
+        updateAttendantDashboard();
+      }
+    } else {
+      alert("Please select role, enter email and PIN.");
+    }
+  }
+
+  function recordTransaction() {
+    let liters = parseInt(document.getElementById('liters').value);
+    let price = parseInt(document.getElementById('price').value);
+
+    if(liters > 0 && price > 0 && liters <= stock) {
+      let sale = liters * price;
+      stock -= liters;
+      totalRevenue += sale;
+      totalLitersSold += liters;
+
+      // Save transaction log
+      let record = {
+        date: new Date().toLocaleString(),
+        attendant: currentUser,
+        liters: liters,
+        price: price,
+        total: sale
+      };
+      transactions.push(record);
+
+      saveData();
+      updateAttendantDashboard();
+      updateAdminDashboard();
+
+      if(stock < 5000) {
+        document.getElementById('att-alert').textContent = "⚠ Alert: Stock below 5000 liters!";
+        document.getElementById('admin-alert').textContent = "⚠ Alert: Stock below 5000 liters!";
+      }
+
+      document.getElementById('liters').value = "";
+      document.getElementById('price').value = "";
+    } else {
+      alert("Invalid entry or insufficient stock.");
+    }
+  }
+
+  function submitShiftReport() {
+    shiftSubmitted = true;
+    let report = {
+      date: new Date().toLocaleString(),
+      attendant: currentUser,
+      status: "Submitted"
+    };
+    shiftReports.push(report);
+    saveData();
+    updateAdminDashboard();
+    alert("Shift report submitted successfully!");
+  }
+
+  function addStock() {
+    let newLiters = parseInt(document.getElementById('newStock').value);
+    if(newLiters > 0) {
+      stock += newLiters;
+      saveData();
+      updateAdminDashboard();
+      updateAttendantDashboard();
+      alert("Stock updated successfully!");
+      document.getElementById('newStock').value = "";
+    } else {
+      alert("Enter a valid stock amount.");
+    }
+  }
+
+  function updateAdminDashboard() {
+    document.getElementById('admin-stock').textContent = stock;
+    document.getElementById('admin-revenue').textContent = totalRevenue;
+    document.getElementById('admin-litersSold').textContent = totalLitersSold;
+
+    // Update transaction log table
+    let tbody = document.getElementById("transaction-log");
+    tbody.innerHTML = "";
+    transactions.forEach(t => {
+      tbody.innerHTML += `<tr>
+        <td>${t.date}</td><td>${t.attendant}</td>
+        <td>${t.liters}</td><td>${t.price}</td><td>${t.total}</td>
+      </tr>`;
+    });
+
+    // Update shift reports table
+    let sbody = document.getElementById("shift-log");
+    sbody.innerHTML = "";
+    shiftReports.forEach(r => {
+      sbody.innerHTML += `<tr>
+        <td>${r.date}</td><td>${r.attendant}</td><td>${r.status}</td>
+      </tr>`;
+    });
+  }
+
+  function updateAttendantDashboard() {
+    document.getElementById('att-stock').textContent = stock;
+    document.getElementById('att-revenue').textContent = totalRevenue;
+    document.getElementById('att-litersSold').textContent = totalLitersSold;
+  }
+
+  function logout() {
+    if(currentRole === "attendant" && !shiftSubmitted) {
+      alert("You must submit end-of-shift report before logout.");
+      return;
+    }
+    location.reload(); // reset UI but keep LocalStorage data
+  }
+
+  // Load data into tables on page load
+  window.onload = function() {
+    if(localStorage.getItem("stock")) {
+      updateAdminDashboard();
+      updateAttendantDashboard();
+    }
+  };
+</script>
+
+</body>
+</html>
